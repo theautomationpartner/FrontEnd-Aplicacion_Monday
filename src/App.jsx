@@ -110,9 +110,12 @@ const App = () => {
     } catch (err) {
         console.error("❌ Error detallado de Axios:", err);
         const errorMsg = err.response?.data?.error || err.message || "Error desconocido";
-        alert("Error al guardar: " + errorMsg);
+        const detailedError = err.response?.data?.details ? `\n\nDetalle técnico: ${err.response.data.details}` : "";
+        
+        alert("Error al guardar: " + errorMsg + detailedError);
+        
         monday.execute("notice", {
-            message: "Error al guardar los datos. Verificá la conexión con el backend.",
+            message: "Error al guardar: " + errorMsg,
             type: "error"
         });
     } finally {
