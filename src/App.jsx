@@ -7,7 +7,7 @@ import "./App.css";
 
 const monday = mondaySdk();
 // Usamos variable de entorno para la URL del Backend separado
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001/api";
+const API_URL = (import.meta.env.VITE_BACKEND_URL || "").trim() || "/api";
 
 /* ─── Iconos SVG inline ─── */
 const IconCert = () => (
@@ -44,9 +44,12 @@ const IVA_OPTIONS = [
 
 const App = () => {
   const [context, setContext] = useState(null);
+  const [locationData, setLocationData] = useState(null);
   const [activeSection, setActiveSection] = useState("datos");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingSavedData, setIsFetchingSavedData] = useState(false);
+  const [apiStatus, setApiStatus] = useState("checking");
+  const [apiError, setApiError] = useState("");
 
   // Certificados
   const [crtFile, setCrtFile] = useState(null);
@@ -70,11 +73,48 @@ const App = () => {
   const [mapping, setMapping] = useState({});
 
   useEffect(() => {
-    monday.listen("context", (res) => {
+    monday.get("context").then((res) => {
+      console.log("Contexto inicial:", res.data);
+      setContext(res.data);
+    });
+
+    monday.get("location").then((res) => {
+      setLocationData(res.data);
+    });
+
+    const unsubscribeContext = monday.listen("context", (res) => {
       console.log("Contexto recibido:", res.data);
       setContext(res.data);
     });
+
+    const unsubscribeLocation = monday.listen("location", (res) => {
+      setLocationData(res.data);
+    });
+
+    return () => {
+      unsubscribeContext?.();
+      unsubscribeLocation?.();
+    };
   }, []);
+
+  useEffect(() => {
+    const checkApi = async () => {
+      try {
+        await axios.get(`${API_URL}/health`, { timeout: 8000 });
+        setApiStatus("ok");
+        setApiError("");
+      } catch (err) {
+        setApiStatus("error");
+        setApiError(err?.message || "No se pudo conectar al backend");
+      }
+    };
+
+    checkApi();
+  }, []);
+
+  const boardId = context?.boardId || context?.locationContext?.boardId || null;
+  const appFeatureId = context?.appFeatureId || null;
+  const viewIdFromHref = locationData?.href?.match(/\/views\/(\d+)/)?.[1] || null;
 
   // Fetch columns when context is ready
   useEffect(() => {
@@ -98,7 +138,13 @@ const App = () => {
 
       setIsFetchingSavedData(true);
       try {
-        const response = await axios.get(`${API_URL}/setup/${context.account.id}`);
+        const response = await axios.get(`${API_URL}/setup/${context.account.id}`, {
+          params: {
+            board_id: boardId,
+            view_id: viewIdFromHref,
+            app_feature_id: appFeatureId
+          }
+        });
         const data = response.data;
 
         if (data?.hasFiscalData && data?.fiscalData) {
@@ -125,13 +171,15 @@ const App = () => {
         }
       } catch (err) {
         console.error("No se pudieron recuperar datos guardados:", err);
+        setApiStatus("error");
+        setApiError(err?.response?.data?.error || err?.message || "Error consultando setup");
       } finally {
         setIsFetchingSavedData(false);
       }
     };
 
     fetchSavedSetup();
-  }, [context]);
+  }, [context, boardId, viewIdFromHref, appFeatureId]);
 
   const handleFiscalChange = (field, value) => {
     setFiscal((prev) => ({ ...prev, [field]: value }));
@@ -152,6 +200,9 @@ const App = () => {
     try {
       const payload = {
         monday_account_id: context.account.id.toString(),
+        board_id: boardId,
+        view_id: viewIdFromHref,
+        app_feature_id: appFeatureId,
         business_name: fiscal.razonSocial,
         cuit: fiscal.cuit,
         iva_condition: fiscal.condicionIva,
@@ -163,6 +214,7 @@ const App = () => {
       const response = await axios.post(`${API_URL}/companies`, payload);
       alert("¡Éxito! Datos fiscales guardados.");
       setHasSavedFiscalData(true);
+      setApiStatus("ok");
       
       monday.execute("notice", {
           message: "Datos fiscales guardados con éxito",
@@ -194,6 +246,9 @@ const App = () => {
     formData.append("crt", crtFile);
     formData.append("key", keyFile);
     formData.append("monday_account_id", context.account.id.toString());
+    formData.append("board_id", boardId || "");
+    formData.append("view_id", viewIdFromHref || "");
+    formData.append("app_feature_id", appFeatureId || "");
 
     try {
       await axios.post(`${API_URL}/certificates`, formData, {
@@ -201,6 +256,7 @@ const App = () => {
       });
       alert("Certificados subidos correctamente.");
         setHasSavedCertificates(true);
+      setApiStatus("ok");
       monday.execute("notice", {
           message: "Certificados subidos y encriptados correctamente",
           type: "success",
@@ -208,6 +264,8 @@ const App = () => {
       });
     } catch (err) {
       alert("Error al subir certificados.");
+        setApiStatus("error");
+        setApiError(err?.response?.data?.error || err?.message || "Error al subir certificados");
       monday.execute("notice", {
           message: "Error al subir certificados. Verificá el servidor backend.",
           type: "error"
@@ -290,6 +348,18 @@ const App = () => {
 
       {/* ─── CONTENIDO PRINCIPAL ─── */}
       <main className="main-content">
+        <div className={`section-status-banner ${apiStatus === "ok" ? "complete" : apiStatus === "error" ? "incomplete" : "neutral"}`} style={{ marginBottom: "14px" }}>
+          {apiStatus === "ok" && (
+            <><strong>Backend:</strong> conectado correctamente ({API_URL}).</>
+          )}
+          {apiStatus === "checking" && (
+            <><strong>Backend:</strong> verificando conexión ({API_URL})...</>
+          )}
+          {apiStatus === "error" && (
+            <><strong>Backend:</strong> sin conexión o URL incorrecta ({API_URL}). {apiError}</>
+          )}
+        </div>
+
         {isLoading && (
             <div className="loading-overlay">
                 <div className="loader"></div>

@@ -217,6 +217,12 @@ body {
   color: #7a4d02;
 }
 
+.section-status-banner.neutral {
+  background: #f3f6fb;
+  border-color: #d8e0ec;
+  color: #44556b;
+}
+
 /* ─── Upload Cards ─── */
 .cards-row {
   display: grid;
