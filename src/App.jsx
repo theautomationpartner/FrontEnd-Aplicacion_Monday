@@ -57,10 +57,13 @@ const App = () => {
   const [context, setContext] = useState(null);
   const [activeSection, setActiveSection] = useState("datos");
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingSavedData, setIsFetchingSavedData] = useState(false);
 
   // Certificados
   const [crtFile, setCrtFile] = useState(null);
   const [keyFile, setKeyFile] = useState(null);
+  const [hasSavedCertificates, setHasSavedCertificates] = useState(false);
+  const [certificateExpirationDate, setCertificateExpirationDate] = useState("");
 
   // Datos fiscales
   const [fiscal, setFiscal] = useState({
@@ -71,6 +74,7 @@ const App = () => {
     domicilio: "",
     condicionIva: "Responsable Inscripto",
   });
+  const [hasSavedFiscalData, setHasSavedFiscalData] = useState(false);
 
   // Mapeo
   const [columns, setColumns] = useState([]);
@@ -97,6 +101,47 @@ const App = () => {
           }
         });
     }
+  }, [context]);
+
+  useEffect(() => {
+    const fetchSavedSetup = async () => {
+      if (!context?.account?.id) return;
+
+      setIsFetchingSavedData(true);
+      try {
+        const response = await axios.get(`${API_URL}/setup/${context.account.id}`);
+        const data = response.data;
+
+        if (data?.hasFiscalData && data?.fiscalData) {
+          setFiscal({
+            puntoVenta: data.fiscalData.default_point_of_sale?.toString() || "",
+            cuit: data.fiscalData.cuit || "",
+            fechaInicio: data.fiscalData.fecha_inicio
+              ? new Date(data.fiscalData.fecha_inicio).toISOString().split("T")[0]
+              : "",
+            razonSocial: data.fiscalData.business_name || "",
+            domicilio: data.fiscalData.domicilio || "",
+            condicionIva: data.fiscalData.iva_condition || "Responsable Inscripto",
+          });
+          setHasSavedFiscalData(true);
+        }
+
+        if (data?.hasCertificates) {
+          setHasSavedCertificates(true);
+          setCertificateExpirationDate(
+            data?.certificates?.expiration_date
+              ? new Date(data.certificates.expiration_date).toLocaleDateString("es-AR")
+              : ""
+          );
+        }
+      } catch (err) {
+        console.error("No se pudieron recuperar datos guardados:", err);
+      } finally {
+        setIsFetchingSavedData(false);
+      }
+    };
+
+    fetchSavedSetup();
   }, [context]);
 
   const handleFiscalChange = (field, value) => {
@@ -128,6 +173,7 @@ const App = () => {
 
       const response = await axios.post(`${API_URL}/companies`, payload);
       alert("¡Éxito! Datos fiscales guardados.");
+      setHasSavedFiscalData(true);
       
       monday.execute("notice", {
           message: "Datos fiscales guardados con éxito",
@@ -165,6 +211,7 @@ const App = () => {
           headers: { "Content-Type": "multipart/form-data" }
       });
       alert("Certificados subidos correctamente.");
+        setHasSavedCertificates(true);
       monday.execute("notice", {
           message: "Certificados subidos y encriptados correctamente",
           type: "success",
@@ -179,6 +226,27 @@ const App = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fiscalFormCompleted =
+    Boolean(fiscal.razonSocial?.trim()) &&
+    Boolean(fiscal.cuit?.trim()) &&
+    Boolean(fiscal.puntoVenta?.toString().trim()) &&
+    Boolean(fiscal.fechaInicio) &&
+    Boolean(fiscal.domicilio?.trim()) &&
+    Boolean(fiscal.condicionIva?.trim());
+
+  const fiscalStatus = hasSavedFiscalData || fiscalFormCompleted ? "complete" : "incomplete";
+  const certificateStatus = hasSavedCertificates || (crtFile && keyFile) ? "complete" : "incomplete";
+
+  const sectionStatus = {
+    datos: fiscalStatus,
+    certificados: certificateStatus,
+  };
+
+  const getStatusLabel = (status) => {
+    if (status === "complete") return "Completo";
+    return "Pendiente";
   };
 
   const renderVisualSelect = (fieldId, placeholderText) => (
@@ -209,7 +277,14 @@ const App = () => {
               onClick={() => setActiveSection(item.id)}
             >
               <span className="sidebar-item-icon">{item.icon}</span>
-              {item.label}
+              <span className="sidebar-item-content">
+                <span>{item.label}</span>
+                {sectionStatus[item.id] && (
+                  <span className={`status-pill ${sectionStatus[item.id]}`}>
+                    {getStatusLabel(sectionStatus[item.id])}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </nav>
@@ -241,6 +316,14 @@ const App = () => {
               <p className="section-subtitle">
                 Completá la información de tu empresa para la facturación electrónica.
               </p>
+            </div>
+
+            <div className={`section-status-banner ${fiscalStatus}`}>
+              {hasSavedFiscalData ? (
+                <><strong>Estado:</strong> Datos fiscales ya guardados. Revisalos y actualizalos si cambió algo.</>
+              ) : (
+                <><strong>Estado:</strong> Faltan completar datos fiscales para continuar.</>
+              )}
             </div>
 
             <div className="form-grid">
@@ -324,6 +407,10 @@ const App = () => {
                 {isLoading ? "Guardando..." : "Guardar Datos Fiscales"}
               </button>
             </div>
+
+            {isFetchingSavedData && (
+              <p className="fetching-text">Cargando datos guardados...</p>
+            )}
           </section>
         )}
 
@@ -335,6 +422,18 @@ const App = () => {
               <p className="section-subtitle">
                 Subí tus archivos de certificado y clave privada. Los archivos se encriptarán automáticamente antes de guardarse.
               </p>
+            </div>
+
+            <div className={`section-status-banner ${certificateStatus}`}>
+              {hasSavedCertificates ? (
+                <>
+                  <strong>Estado:</strong> Certificados ya cargados.
+                  {certificateExpirationDate ? ` Vencimiento informado: ${certificateExpirationDate}.` : ""}
+                  {" "}Si querés, podés reemplazarlos con nuevos archivos.
+                </>
+              ) : (
+                <><strong>Estado:</strong> Todavía no hay certificados guardados para esta cuenta.</>
+              )}
             </div>
 
             <div className="cards-row">

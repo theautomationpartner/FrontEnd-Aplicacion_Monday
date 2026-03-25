@@ -109,6 +109,35 @@ body {
   flex-shrink: 0;
 }
 
+.sidebar-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.status-pill {
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.status-pill.complete {
+  background: #e7f7ef;
+  color: #0b7841;
+  border-color: #b8ebcf;
+}
+
+.status-pill.incomplete {
+  background: #fff4e5;
+  color: #8a5a00;
+  border-color: #ffd8a8;
+}
+
 /* ─── Sidebar Footer ─── */
 .sidebar-footer {
   padding: 16px;
@@ -166,6 +195,26 @@ body {
   font-size: 14px;
   color: #676879;
   line-height: 1.5;
+}
+
+.section-status-banner {
+  font-size: 13px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid;
+}
+
+.section-status-banner.complete {
+  background: #f2fbf7;
+  border-color: #bfead2;
+  color: #1d6340;
+}
+
+.section-status-banner.incomplete {
+  background: #fff8ef;
+  border-color: #ffd9ab;
+  color: #7a4d02;
 }
 
 /* ─── Upload Cards ─── */
@@ -433,6 +482,12 @@ body {
 
 .btn-primary:active {
   background: #004d9e;
+}
+
+.fetching-text {
+  margin-top: 10px;
+  color: #676879;
+  font-size: 12px;
 }
 
 /* ─── Loading Overlay ─── */
