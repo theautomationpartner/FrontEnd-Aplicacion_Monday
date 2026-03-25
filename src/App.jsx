@@ -7,7 +7,13 @@ import "./App.css";
 
 const monday = mondaySdk();
 // Usamos variable de entorno para la URL del Backend separado
-const API_URL = (import.meta.env.VITE_BACKEND_URL || "").trim() || "/api";
+const configuredApiUrl = (import.meta.env.VITE_BACKEND_URL || "").trim();
+const deprecatedBackendHost = "back-end-aplicacion-monday.netlify.app";
+const API_URL = (
+  configuredApiUrl && !configuredApiUrl.includes(deprecatedBackendHost)
+    ? configuredApiUrl
+    : "https://facturacion-back-end.netlify.app/api"
+).replace(/\/$/, "");
 
 /* ─── Iconos SVG inline ─── */
 const IconCert = () => (
