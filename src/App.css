@@ -223,6 +223,37 @@ body {
   color: #44556b;
 }
 
+.section-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  border: 1px solid #bfc8d9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #33415c;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #f5f8fc;
+}
+
+.section-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.section-fieldset.locked {
+  opacity: 0.75;
+}
+
 /* ─── Upload Cards ─── */
 .cards-row {
   display: grid;
@@ -778,4 +809,13 @@ body {
 .invoice-preview-select:focus {
   border-style: solid;
   box-shadow: 0 0 0 2px rgba(0, 115, 234, 0.2);
+}
+
+.invoice-preview-select.disabled,
+.invoice-preview-select:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+  background: #f5f6f8;
+  border-color: #b7becd;
+  color: #56627a;
 }

@@ -56,6 +56,9 @@ const App = () => {
   const [isFetchingSavedData, setIsFetchingSavedData] = useState(false);
   const [apiStatus, setApiStatus] = useState("checking");
   const [apiError, setApiError] = useState("");
+  const [isFiscalLocked, setIsFiscalLocked] = useState(false);
+  const [isCertificatesLocked, setIsCertificatesLocked] = useState(false);
+  const [isMappingLocked, setIsMappingLocked] = useState(false);
 
   // Certificados
   const [crtFile, setCrtFile] = useState(null);
@@ -121,6 +124,10 @@ const App = () => {
   const boardId = context?.boardId || context?.locationContext?.boardId || null;
   const appFeatureId = context?.appFeatureId || null;
   const viewIdFromHref = locationData?.href?.match(/\/views\/(\d+)/)?.[1] || null;
+  const mappingStorageKey =
+    context?.account?.id && boardId
+      ? `afip:mapping_v2:${context.account.id}:${boardId}:${viewIdFromHref || "no-view"}`
+      : null;
 
   // Fetch columns when context is ready
   useEffect(() => {
@@ -165,10 +172,12 @@ const App = () => {
             condicionIva: data.fiscalData.iva_condition || "Responsable Inscripto",
           });
           setHasSavedFiscalData(true);
+          setIsFiscalLocked(true);
         }
 
         if (data?.hasCertificates) {
           setHasSavedCertificates(true);
+          setIsCertificatesLocked(true);
           setCertificateExpirationDate(
             data?.certificates?.expiration_date
               ? new Date(data.certificates.expiration_date).toLocaleDateString("es-AR")
@@ -186,6 +195,23 @@ const App = () => {
 
     fetchSavedSetup();
   }, [context, boardId, viewIdFromHref, appFeatureId]);
+
+  useEffect(() => {
+    if (!mappingStorageKey) return;
+
+    const savedMappingRaw = localStorage.getItem(mappingStorageKey);
+    if (!savedMappingRaw) return;
+
+    try {
+      const savedMapping = JSON.parse(savedMappingRaw);
+      if (savedMapping && typeof savedMapping === "object") {
+        setMapping(savedMapping);
+        setIsMappingLocked(Object.keys(savedMapping).length > 0);
+      }
+    } catch (err) {
+      console.error("No se pudo parsear el mapeo guardado:", err);
+    }
+  }, [mappingStorageKey]);
 
   const handleFiscalChange = (field, value) => {
     setFiscal((prev) => ({ ...prev, [field]: value }));
@@ -220,6 +246,7 @@ const App = () => {
       const response = await axios.post(`${API_URL}/companies`, payload);
       alert("¡Éxito! Datos fiscales guardados.");
       setHasSavedFiscalData(true);
+      setIsFiscalLocked(true);
       setApiStatus("ok");
       
       monday.execute("notice", {
@@ -261,7 +288,10 @@ const App = () => {
           headers: { "Content-Type": "multipart/form-data" }
       });
       alert("Certificados subidos correctamente.");
-        setHasSavedCertificates(true);
+      setHasSavedCertificates(true);
+      setIsCertificatesLocked(true);
+      setCrtFile(null);
+      setKeyFile(null);
       setApiStatus("ok");
       monday.execute("notice", {
           message: "Certificados subidos y encriptados correctamente",
@@ -291,10 +321,14 @@ const App = () => {
 
   const fiscalStatus = hasSavedFiscalData || fiscalFormCompleted ? "complete" : "incomplete";
   const certificateStatus = hasSavedCertificates || (crtFile && keyFile) ? "complete" : "incomplete";
+  const requiredMappingFields = ["fecha_emision", "receptor_cuit", "concepto", "cantidad", "precio_unitario", "subtotal"];
+  const mappingCompleted = requiredMappingFields.every((field) => Boolean(mapping[field]));
+  const mappingStatus = isMappingLocked || mappingCompleted ? "complete" : "incomplete";
 
   const sectionStatus = {
     datos: fiscalStatus,
     certificados: certificateStatus,
+    mapping_v2: mappingStatus,
   };
 
   const getStatusLabel = (status) => {
@@ -302,12 +336,34 @@ const App = () => {
     return "Pendiente";
   };
 
+  const handleSaveVisualMapping = () => {
+    const missingFields = requiredMappingFields.filter((field) => !mapping[field]);
+    if (missingFields.length > 0) {
+      alert("Faltan campos por mapear antes de guardar.");
+      return;
+    }
+
+    if (!mappingStorageKey) {
+      alert("No se pudo identificar el tablero/vista para guardar el mapeo.");
+      return;
+    }
+
+    localStorage.setItem(mappingStorageKey, JSON.stringify(mapping));
+    setIsMappingLocked(true);
+    monday.execute("notice", {
+      message: "Mapeo visual guardado correctamente",
+      type: "success",
+      duration: 4000,
+    });
+  };
+
   const renderVisualSelect = (fieldId, placeholderText) => (
     <select
-      className="invoice-preview-select"
+      className={`invoice-preview-select ${isMappingLocked ? "disabled" : ""}`}
       value={mapping[fieldId] || ""}
       onChange={e => setMapping({...mapping, [fieldId]: e.target.value})}
       title={placeholderText}
+      disabled={isMappingLocked}
     >
       <option value="">⚙️ Map: {placeholderText}</option>
       {columns.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -391,6 +447,15 @@ const App = () => {
               )}
             </div>
 
+            {hasSavedFiscalData && (
+              <div className="section-controls">
+                <button className="btn-secondary" onClick={() => setIsFiscalLocked((prev) => !prev)}>
+                  {isFiscalLocked ? "Modificar" : "Bloquear"}
+                </button>
+              </div>
+            )}
+
+            <fieldset className={`section-fieldset ${isFiscalLocked ? "locked" : ""}`} disabled={isFiscalLocked}>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Razón Social</label>
@@ -472,6 +537,7 @@ const App = () => {
                 {isLoading ? "Guardando..." : "Guardar Datos Fiscales"}
               </button>
             </div>
+            </fieldset>
 
             {isFetchingSavedData && (
               <p className="fetching-text">Cargando datos guardados...</p>
@@ -501,6 +567,14 @@ const App = () => {
               )}
             </div>
 
+            {hasSavedCertificates && (
+              <div className="section-controls">
+                <button className="btn-secondary" onClick={() => setIsCertificatesLocked((prev) => !prev)}>
+                  {isCertificatesLocked ? "Modificar" : "Bloquear"}
+                </button>
+              </div>
+            )}
+
             <div className="cards-row">
               {/* Card CRT */}
               <div className="upload-card">
@@ -508,7 +582,12 @@ const App = () => {
                   <h3>Certificado (.crt)</h3>
                   <p>Archivo de certificado público</p>
                 </div>
-                {crtFile ? (
+                {isCertificatesLocked && hasSavedCertificates && !crtFile ? (
+                  <div className="upload-success">
+                    <IconCheck />
+                    <span>Archivo .crt subido en sistema</span>
+                  </div>
+                ) : crtFile ? (
                   <div className="upload-success">
                     <IconCheck />
                     <span>{crtFile.name}</span>
@@ -536,7 +615,12 @@ const App = () => {
                   <h3>Clave Privada (.key)</h3>
                   <p>Archivo de clave privada</p>
                 </div>
-                {keyFile ? (
+                {isCertificatesLocked && hasSavedCertificates && !keyFile ? (
+                  <div className="upload-success">
+                    <IconCheck />
+                    <span>Archivo .key subido en sistema</span>
+                  </div>
+                ) : keyFile ? (
                   <div className="upload-success">
                     <IconCheck />
                     <span>{keyFile.name}</span>
@@ -560,10 +644,14 @@ const App = () => {
             </div>
 
             <div className="form-actions">
-                <button className="btn-primary" onClick={handleUploadCertificates} disabled={isLoading || !crtFile || !keyFile}>
+              <button className="btn-primary" onClick={handleUploadCertificates} disabled={isLoading || !crtFile || !keyFile || isCertificatesLocked}>
                     {isLoading ? "Subiendo..." : "Guardar Certificados"}
                 </button>
             </div>
+
+            {isCertificatesLocked && hasSavedCertificates && (
+              <p className="fetching-text">Los certificados ya estan cargados. Toca "Modificar" para reemplazarlos.</p>
+            )}
 
             <div className="info-box" style={{marginTop: "24px"}}>
               <span className="info-box-icon">🔒</span>
@@ -582,6 +670,20 @@ const App = () => {
               <p className="section-subtitle">
                 Mapeá las columnas haciendo click directamente en los campos de una factura modelo.
               </p>
+            </div>
+
+            <div className={`section-status-banner ${mappingStatus}`}>
+              {isMappingLocked ? (
+                <><strong>Estado:</strong> Mapeo visual guardado y bloqueado para evitar cambios accidentales.</>
+              ) : (
+                <><strong>Estado:</strong> Configurá el mapeo visual y guardalo para no repetirlo.</>
+              )}
+            </div>
+
+            <div className="section-controls">
+              <button className="btn-secondary" onClick={() => setIsMappingLocked((prev) => !prev)}>
+                {isMappingLocked ? "Modificar" : "Bloquear"}
+              </button>
             </div>
 
             <div className="invoice-preview-wrapper">
@@ -664,7 +766,7 @@ const App = () => {
             </div>
 
             <div className="form-actions" style={{marginTop: "20px"}}>
-              <button className="btn-primary" onClick={() => alert("Mapeo visual guardado exitosamente!")}>
+              <button className="btn-primary" onClick={handleSaveVisualMapping} disabled={isMappingLocked}>
                 Guardar Mapeo Visual
               </button>
             </div>
