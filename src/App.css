@@ -734,6 +734,39 @@ body {
   border-color: #fecdd3;
 }
 
+.emit-result {
+  margin-top: 14px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  font-size: 13px;
+}
+
+.emit-result.ok {
+  color: #0b7841;
+  background: #eafaf2;
+  border-color: #b8ebcf;
+}
+
+.emit-result.error {
+  color: #9f1239;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.emit-result-detail {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #e6e9ef;
+  color: #334155;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+}
+
 .setup-guide-modal-overlay {
   position: fixed;
   inset: 0;

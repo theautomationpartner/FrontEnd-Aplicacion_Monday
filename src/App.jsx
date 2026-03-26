@@ -11,6 +11,7 @@ const configuredApiUrl = (import.meta.env.VITE_BACKEND_URL || "").trim();
 const deprecatedBackendHost = "back-end-aplicacion-monday.netlify.app";
 const placeholderBackendHost = "TU-BACKEND-VERCEL.vercel.app";
 const defaultProductionApiUrl = "https://back-end-aplicacion-monday.vercel.app/api";
+const defaultMakeWebhookFacturaCUrl = (import.meta.env.VITE_MAKE_WEBHOOK_FACTURA_C_URL || "").trim();
 const API_URL = (
   configuredApiUrl &&
   !configuredApiUrl.includes(deprecatedBackendHost) &&
@@ -53,7 +54,8 @@ const MENU_ITEMS = [
 const BOARD_ITEM_REQUIRED_COLUMNS = [
   { key: "client_document", label: "CUIT / DNI Receptor", aliases: ["cuit receptor", "dni receptor", "cuit / dni receptor", "cuit/dni receptor", "documento receptor", "documento cliente", "documento", "nro documento", "numero documento"], acceptedTypes: ["text", "numbers"] },
   { key: "client_document_type", label: "Tipo Documento", aliases: ["tipo documento", "tipo doc"], acceptedTypes: ["status", "dropdown", "color"] },
-  { key: "billing_status", label: "Estado Comprobante", aliases: ["estado comprobante", "estado facturacion", "estado factura", "facturacion"], acceptedTypes: ["status", "color", "dropdown"] }
+  { key: "billing_status", label: "Estado Comprobante", aliases: ["estado comprobante", "estado facturacion", "estado factura", "facturacion"], acceptedTypes: ["status", "color", "dropdown"] },
+  { key: "invoice_pdf", label: "Comprobante PDF", aliases: ["comprobante pdf", "pdf comprobante", "pdf factura", "factura pdf"], acceptedTypes: ["file"] }
 ];
 
 const BOARD_SUBITEM_REQUIRED_COLUMNS = [
@@ -89,6 +91,8 @@ const App = () => {
   const [isMappingLocked, setIsMappingLocked] = useState(false);
   const [isSavingBoardConfig, setIsSavingBoardConfig] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isEmittingFacturaC, setIsEmittingFacturaC] = useState(false);
+  const [emitFacturaCResult, setEmitFacturaCResult] = useState(null);
 
   // Certificados
   const [crtFile, setCrtFile] = useState(null);
@@ -117,6 +121,10 @@ const App = () => {
     processing_label: COMPROBANTE_STATUS_FLOW.processing,
     success_label: COMPROBANTE_STATUS_FLOW.success,
     error_label: COMPROBANTE_STATUS_FLOW.error,
+  });
+  const [emitForm, setEmitForm] = useState({
+    itemId: "",
+    webhookUrl: defaultMakeWebhookFacturaCUrl,
   });
   const requiredMappingFields = ["fecha_emision", "receptor_cuit", "concepto", "cantidad", "precio_unitario"];
   const mappingCompleted = requiredMappingFields.every((field) => Boolean(mapping[field]));
@@ -222,6 +230,7 @@ const App = () => {
   }, []);
 
   const boardId = context?.boardId || context?.locationContext?.boardId || null;
+  const contextItemId = context?.itemId || context?.pulseId || context?.locationContext?.itemId || "";
   const appFeatureId = context?.appFeatureId || null;
   const viewIdFromHref = locationData?.href?.match(/\/views\/(\d+)/)?.[1] || null;
   const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
@@ -363,6 +372,14 @@ const App = () => {
       status_column_id: statusColumns[0].value,
     }));
   }, [boardConfig.status_column_id, statusColumns]);
+
+  useEffect(() => {
+    if (!contextItemId) return;
+    setEmitForm((prev) => {
+      if (prev.itemId) return prev;
+      return { ...prev, itemId: String(contextItemId) };
+    });
+  }, [contextItemId]);
 
   useEffect(() => {
     if (activeSection !== "datos" && hasSavedFiscalData) {
@@ -595,6 +612,65 @@ const App = () => {
       });
     } finally {
       setIsSavingBoardConfig(false);
+    }
+  };
+
+  const handleEmitFacturaC = async () => {
+    if (!context?.account?.id || !boardId) {
+      alert("No se pudo identificar cuenta/tablero para emitir factura C.");
+      return;
+    }
+
+    if (!emitForm.itemId?.trim()) {
+      alert("Ingresá el ID del item a emitir.");
+      return;
+    }
+
+    setIsEmittingFacturaC(true);
+    setEmitFacturaCResult(null);
+    try {
+      const payload = {
+        monday_account_id: context.account.id.toString(),
+        board_id: boardId,
+        item_id: emitForm.itemId.trim(),
+      };
+
+      if (emitForm.webhookUrl?.trim()) {
+        payload.webhook_url = emitForm.webhookUrl.trim();
+      }
+
+      const response = await axios.post(`${API_URL}/invoices/emit-c`, payload, {
+        headers: authHeaders,
+      });
+
+      setEmitFacturaCResult({
+        ok: true,
+        message: response.data?.message || "Disparo enviado correctamente",
+        detail: response.data?.make_body || "",
+      });
+
+      monday.execute("notice", {
+        message: "Disparo Factura C enviado a Make",
+        type: "success",
+        duration: 4000,
+      });
+    } catch (err) {
+      const errorMsg = err?.response?.data?.error || err?.message || "Error al emitir Factura C";
+      const errorDetail = err?.response?.data?.make_body || err?.response?.data?.details || "";
+
+      setEmitFacturaCResult({
+        ok: false,
+        message: errorMsg,
+        detail: errorDetail,
+      });
+
+      monday.execute("notice", {
+        message: errorMsg,
+        type: "error",
+        duration: 5000,
+      });
+    } finally {
+      setIsEmittingFacturaC(false);
     }
   };
 
@@ -1235,14 +1311,72 @@ const App = () => {
             <div className="section-header">
               <h1 className="section-title">Emitir Facturas</h1>
               <p className="section-subtitle">
-                Lista de elementos pendientes listos para emitir facturas en AFIP.
+                MVP inicial: disparo manual de Factura C vía webhook de Make.
               </p>
             </div>
 
-            <div className="empty-state">
-              <IconFile className="empty-state-icon" style={{width: 48, height: 48, color: '#b0b0b0', marginBottom: 16}} />
-              <h3>Aún estamos preparando esto</h3>
-              <p>Pronto podrás ver tu lista de facturas pendientes de emitir directamente aquí, utilizando el mapeo configurado previamente.</p>
+            <div className="board-setup-card">
+              <h3 className="board-setup-card-title">Flujo de estados para emisión</h3>
+              <div className="board-flow-statuses" role="list" aria-label="Flujo de estados de comprobante">
+                <span className="board-flow-pill trigger" role="listitem">{COMPROBANTE_STATUS_FLOW.trigger}</span>
+                <span className="board-flow-pill processing" role="listitem">{COMPROBANTE_STATUS_FLOW.processing}</span>
+                <span className="board-flow-pill success" role="listitem">{COMPROBANTE_STATUS_FLOW.success}</span>
+                <span className="board-flow-pill error" role="listitem">{COMPROBANTE_STATUS_FLOW.error}</span>
+              </div>
+              <p className="board-setup-helper">
+                El escenario de Make debe recibir el item y gestionar estos estados en la columna configurada.
+              </p>
+            </div>
+
+            <div className="board-setup-card">
+              <h3 className="board-setup-card-title">Emitir Factura C (manual)</h3>
+              <div className="form-grid board-config-grid">
+                <div className="form-group">
+                  <label className="form-label">Board ID detectado</label>
+                  <input className="form-input" type="text" value={boardId || "Sin board detectado"} readOnly />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">ID del item a emitir</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="Ej: 1234567890"
+                    value={emitForm.itemId}
+                    onChange={(e) => setEmitForm((prev) => ({ ...prev, itemId: e.target.value }))}
+                  />
+                </div>
+
+                <div className="form-group full-width">
+                  <label className="form-label">Webhook Make (opcional si está en backend)</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="https://hook.us2.make.com/..."
+                    value={emitForm.webhookUrl}
+                    onChange={(e) => setEmitForm((prev) => ({ ...prev, webhookUrl: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button
+                  className="btn-primary"
+                  onClick={handleEmitFacturaC}
+                  disabled={isEmittingFacturaC || !boardId}
+                >
+                  {isEmittingFacturaC ? "Enviando a Make..." : "Emitir Factura C"}
+                </button>
+              </div>
+
+              {emitFacturaCResult && (
+                <div className={`emit-result ${emitFacturaCResult.ok ? "ok" : "error"}`}>
+                  <strong>{emitFacturaCResult.ok ? "OK" : "Error"}:</strong> {emitFacturaCResult.message}
+                  {emitFacturaCResult.detail && (
+                    <pre className="emit-result-detail">{emitFacturaCResult.detail}</pre>
+                  )}
+                </div>
+              )}
             </div>
           </section>
         )}
