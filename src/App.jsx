@@ -73,6 +73,7 @@ const App = () => {
   const [isFetchingSavedData, setIsFetchingSavedData] = useState(false);
   const [apiStatus, setApiStatus] = useState("checking");
   const [apiError, setApiError] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [isFiscalLocked, setIsFiscalLocked] = useState(false);
   const [isCertificatesLocked, setIsCertificatesLocked] = useState(false);
   const [isMappingLocked, setIsMappingLocked] = useState(false);
@@ -153,6 +154,14 @@ const App = () => {
   const hasAutomationConfig = Boolean(boardConfig.status_column_id) && Boolean(boardConfig.trigger_label?.trim()) && Boolean(boardConfig.success_label?.trim()) && Boolean(boardConfig.error_label?.trim());
 
   useEffect(() => {
+    monday
+      .get("sessionToken")
+      .then((res) => setSessionToken(res?.data || ""))
+      .catch((err) => {
+        console.error("No se pudo obtener sessionToken de monday:", err);
+        setSessionToken("");
+      });
+
     monday.get("context").then((res) => {
       console.log("Contexto inicial:", res.data);
       setContext(res.data);
@@ -195,6 +204,7 @@ const App = () => {
   const boardId = context?.boardId || context?.locationContext?.boardId || null;
   const appFeatureId = context?.appFeatureId || null;
   const viewIdFromHref = locationData?.href?.match(/\/views\/(\d+)/)?.[1] || null;
+  const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
 
   // Fetch columns when context is ready
   useEffect(() => {
@@ -266,7 +276,8 @@ const App = () => {
             board_id: boardId,
             view_id: viewIdFromHref,
             app_feature_id: appFeatureId
-          }
+          },
+          headers: authHeaders
         });
         const data = response.data;
 
@@ -321,7 +332,7 @@ const App = () => {
     };
 
     fetchSavedSetup();
-  }, [context, boardId, viewIdFromHref, appFeatureId]);
+  }, [context, boardId, viewIdFromHref, appFeatureId, sessionToken]);
 
   useEffect(() => {
     if (boardConfig.status_column_id || statusColumns.length === 0) return;
@@ -374,7 +385,7 @@ const App = () => {
         fecha_inicio: fiscal.fechaInicio
       };
 
-      const response = await axios.post(`${API_URL}/companies`, payload);
+      const response = await axios.post(`${API_URL}/companies`, payload, { headers: authHeaders });
       alert("¡Éxito! Datos fiscales guardados.");
       setHasSavedFiscalData(true);
       setIsFiscalLocked(true);
@@ -415,8 +426,8 @@ const App = () => {
     formData.append("app_feature_id", appFeatureId || "");
 
     try {
-      await axios.post(`${API_URL}/certificates`, formData, {
-          headers: { "Content-Type": "multipart/form-data" }
+        await axios.post(`${API_URL}/certificates`, formData, {
+          headers: { "Content-Type": "multipart/form-data", ...authHeaders }
       });
       alert("Certificados subidos correctamente.");
       setHasSavedCertificates(true);
@@ -489,7 +500,7 @@ const App = () => {
         app_feature_id: appFeatureId,
         mapping,
         is_locked: true,
-      });
+      }, { headers: authHeaders });
 
       setIsMappingLocked(true);
       monday.execute("notice", {
@@ -545,7 +556,7 @@ const App = () => {
           resolved_column_type: column.foundColumn?.type || null,
           status: column.status,
         })),
-      });
+      }, { headers: authHeaders });
 
       monday.execute("notice", {
         message: "Configuración de tablero guardada",
