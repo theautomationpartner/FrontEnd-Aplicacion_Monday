@@ -355,7 +355,7 @@ const App = () => {
         }
 
         try {
-          const tokenResponse = await axios.get(`${API_URL}/user-api-token/${context.account.id}`, {
+          const tokenResponse = await axios.get(`${API_URL}/user-api-token-v2/${context.account.id}`, {
             headers: authHeaders,
           });
           setHasSavedUserApiToken(Boolean(tokenResponse?.data?.has_token));
@@ -639,7 +639,7 @@ const App = () => {
 
     setIsSavingUserApiToken(true);
     try {
-      await axios.post(`${API_URL}/user-api-token`, {
+      await axios.post(`${API_URL}/user-api-token-v2`, {
         monday_account_id: context.account.id.toString(),
         api_token: userApiToken.trim(),
       }, { headers: authHeaders });
