@@ -51,9 +51,9 @@ const MENU_ITEMS = [
 ];
 
 const BOARD_ITEM_REQUIRED_COLUMNS = [
-  { key: "client_document", label: "Documento Cliente", aliases: ["documento cliente", "documento", "nro documento", "numero documento"], acceptedTypes: ["text", "numbers"] },
+  { key: "client_document", label: "CUIT / DNI Receptor", aliases: ["cuit receptor", "dni receptor", "cuit / dni receptor", "cuit/dni receptor", "documento receptor", "documento cliente", "documento", "nro documento", "numero documento"], acceptedTypes: ["text", "numbers"] },
   { key: "client_document_type", label: "Tipo Documento", aliases: ["tipo documento", "tipo doc"], acceptedTypes: ["status", "dropdown", "color"] },
-  { key: "billing_status", label: "Estado Facturación", aliases: ["estado facturacion", "estado factura", "facturacion"], acceptedTypes: ["status", "color", "dropdown"] }
+  { key: "billing_status", label: "Estado Comprobante", aliases: ["estado comprobante", "estado facturacion", "estado factura", "facturacion"], acceptedTypes: ["status", "color", "dropdown"] }
 ];
 
 const BOARD_SUBITEM_REQUIRED_COLUMNS = [
@@ -67,6 +67,13 @@ const IVA_OPTIONS = [
   "Monotributista",
   "Exento",
 ];
+
+const COMPROBANTE_STATUS_FLOW = {
+  trigger: "Crear Comprobante",
+  processing: "Creando Comprobante",
+  success: "Comprobante Creado",
+  error: "Error - Mirar Comentarios",
+};
 
 const App = () => {
   const [context, setContext] = useState(null);
@@ -106,9 +113,10 @@ const App = () => {
   const [mapping, setMapping] = useState({});
   const [boardConfig, setBoardConfig] = useState({
     status_column_id: "",
-    trigger_label: "Crear Factura",
-    success_label: "Emitida",
-    error_label: "Error",
+    trigger_label: COMPROBANTE_STATUS_FLOW.trigger,
+    processing_label: COMPROBANTE_STATUS_FLOW.processing,
+    success_label: COMPROBANTE_STATUS_FLOW.success,
+    error_label: COMPROBANTE_STATUS_FLOW.error,
   });
   const requiredMappingFields = ["fecha_emision", "receptor_cuit", "concepto", "cantidad", "precio_unitario"];
   const mappingCompleted = requiredMappingFields.every((field) => Boolean(mapping[field]));
@@ -163,7 +171,7 @@ const App = () => {
   const allRequiredItemColumnsReady = requiredItemColumnsStatus.every((column) => column.status === "ok");
   const allRequiredSubitemColumnsReady = requiredSubitemColumnsStatus.every((column) => column.status === "ok");
   const allRequiredBoardColumnsReady = allRequiredItemColumnsReady && allRequiredSubitemColumnsReady;
-  const hasAutomationConfig = Boolean(boardConfig.status_column_id) && Boolean(boardConfig.trigger_label?.trim()) && Boolean(boardConfig.success_label?.trim()) && Boolean(boardConfig.error_label?.trim());
+  const hasAutomationConfig = Boolean(boardConfig.status_column_id);
 
   useEffect(() => {
     monday
@@ -329,9 +337,10 @@ const App = () => {
         if (data?.boardConfig && typeof data.boardConfig === "object") {
           setBoardConfig({
             status_column_id: data.boardConfig.status_column_id || "",
-            trigger_label: data.boardConfig.trigger_label || "Crear Factura",
-            success_label: data.boardConfig.success_label || "Emitida",
-            error_label: data.boardConfig.error_label || "Error",
+            trigger_label: COMPROBANTE_STATUS_FLOW.trigger,
+            processing_label: COMPROBANTE_STATUS_FLOW.processing,
+            success_label: COMPROBANTE_STATUS_FLOW.success,
+            error_label: COMPROBANTE_STATUS_FLOW.error,
           });
         }
       } catch (err) {
@@ -557,9 +566,9 @@ const App = () => {
         view_id: viewIdFromHref,
         app_feature_id: appFeatureId,
         status_column_id: boardConfig.status_column_id,
-        trigger_label: boardConfig.trigger_label,
-        success_label: boardConfig.success_label,
-        error_label: boardConfig.error_label,
+        trigger_label: COMPROBANTE_STATUS_FLOW.trigger,
+        success_label: COMPROBANTE_STATUS_FLOW.success,
+        error_label: COMPROBANTE_STATUS_FLOW.error,
         required_columns: requiredBoardColumnsStatus.map((column) => ({
           key: column.key,
           expected_label: column.label,
@@ -1136,6 +1145,15 @@ const App = () => {
 
             <div className="board-setup-card">
               <h3 className="board-setup-card-title">Reglas de automatización</h3>
+              <p className="board-setup-helper">
+                Esta app usa estos 4 estados fijos en la columna de estado para disparar y seguir el proceso.
+              </p>
+              <div className="board-flow-statuses" role="list" aria-label="Flujo de estados de comprobante">
+                <span className="board-flow-pill trigger" role="listitem">{COMPROBANTE_STATUS_FLOW.trigger}</span>
+                <span className="board-flow-pill processing" role="listitem">{COMPROBANTE_STATUS_FLOW.processing}</span>
+                <span className="board-flow-pill success" role="listitem">{COMPROBANTE_STATUS_FLOW.success}</span>
+                <span className="board-flow-pill error" role="listitem">{COMPROBANTE_STATUS_FLOW.error}</span>
+              </div>
               <div className="form-grid board-config-grid">
                 <div className="form-group full-width">
                   <label className="form-label">Columna de estado que dispara emisión</label>
@@ -1149,36 +1167,6 @@ const App = () => {
                       <option key={column.value} value={column.value}>{column.label}</option>
                     ))}
                   </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Valor disparador</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={boardConfig.trigger_label}
-                    onChange={(e) => setBoardConfig((prev) => ({ ...prev, trigger_label: e.target.value }))}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Valor de éxito</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={boardConfig.success_label}
-                    onChange={(e) => setBoardConfig((prev) => ({ ...prev, success_label: e.target.value }))}
-                  />
-                </div>
-
-                <div className="form-group full-width">
-                  <label className="form-label">Valor de error</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={boardConfig.error_label}
-                    onChange={(e) => setBoardConfig((prev) => ({ ...prev, error_label: e.target.value }))}
-                  />
                 </div>
               </div>
 

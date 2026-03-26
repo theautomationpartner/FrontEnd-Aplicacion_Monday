@@ -695,6 +695,45 @@ body {
   margin-bottom: 10px;
 }
 
+.board-flow-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.board-flow-pill {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+}
+
+.board-flow-pill.trigger {
+  color: #8a5a00;
+  background: #fff7ea;
+  border-color: #ffd8a8;
+}
+
+.board-flow-pill.processing {
+  color: #005f9e;
+  background: #eef7ff;
+  border-color: #c9e3ff;
+}
+
+.board-flow-pill.success {
+  color: #0b7841;
+  background: #eafaf2;
+  border-color: #b8ebcf;
+}
+
+.board-flow-pill.error {
+  color: #9f1239;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
 .setup-guide-modal-overlay {
   position: fixed;
   inset: 0;
