@@ -709,12 +709,30 @@ const App = () => {
         headers: authHeaders,
       });
 
+      if (response.data?.pdf_base64) {
+        const fileBytes = atob(response.data.pdf_base64);
+        const byteNumbers = new Array(fileBytes.length);
+        for (let i = 0; i < fileBytes.length; i += 1) {
+          byteNumbers[i] = fileBytes.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `Factura-C-${emitForm.itemId.trim()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      }
+
       setEmitFacturaCResult({
         ok: true,
         message: response.data?.message || "Factura C procesada",
         detail: JSON.stringify({
           draft: response.data?.draft || null,
           afip_result: response.data?.afip_result || null,
+          pdf_generado: Boolean(response.data?.pdf_base64),
         }, null, 2),
       });
 
